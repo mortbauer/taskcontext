@@ -11,11 +11,24 @@ import taskcontext.core as core
 core = importlib.reload(core)
 
 
+logger = logging.getLogger(__name__)
+
 logging.basicConfig(level=logging.INFO)
+
+
+class AutoTransitMixin:
+    def __init__(self,state):
+        self.obj = state
+        desired = type(self)
+        if self.get_state() != desired:
+            logger.info('autotransit from %s to %s',self.get_state(),desired)
+            self.taskmanager.auto_transit_to(state,desired)
+        super(AutoTransitMixin,self).__init__(state)
 
 
 class CubeMachine(AttributeState):
     is_machine = True
+    taskmanager = core.TaskManager()
 
     class Summary:
         Init: [Vrp]
@@ -27,32 +40,33 @@ class CubeMachine(AttributeState):
         Yangsh: [Shell]
 
 
-class Init(CubeMachine):
+class Init(AutoTransitMixin,CubeMachine):
     def login(self) -> [Vrp]:
         print("Login")
 
-class Vrp(CubeMachine):
+class Vrp(AutoTransitMixin,CubeMachine):
     def enter_sys(self) -> [Sys]:
         print("Enter sys")
 
     def logout(self) -> [Init]:
         print("Logout")
 
-class Sys(CubeMachine):
+
+class Sys(AutoTransitMixin,CubeMachine):
     def enter_diag(self) -> [Diag]:
         print("Enter diag")
 
     def leave_sys(self) -> [Vrp]:
         print("Leave sys")
 
-class Diag(CubeMachine):
+class Diag(AutoTransitMixin,CubeMachine):
     def enter_shell(self) -> [Shell]:
         print("Enter shell")
 
     def leave_diag(self) -> [Sys]:
         print("Leave diag")
 
-class Shell(CubeMachine):
+class Shell(AutoTransitMixin,CubeMachine):
     def enter_container(self) -> [Container]:
         print("Enter container")
 
@@ -62,16 +76,17 @@ class Shell(CubeMachine):
     def leave_shell(self) -> [Diag]:
         print("Leave shell")
 
-class Container(CubeMachine):
+class Container(AutoTransitMixin,CubeMachine):
     def leave_container(self) -> [Shell]:
         print("Leave container")
 
-class Yangsh(CubeMachine):
+class Yangsh(AutoTransitMixin,CubeMachine):
     def leave_yangsh(self) -> [Shell]:
         print("Leave yangsh")
 
 
 CubeMachine.complete()
+CubeMachine.taskmanager.init(CubeMachine)
 
 class State:
     def __init__(self,initial:StateMeta):
@@ -93,11 +108,13 @@ def do_in_yangsh(state:State):
 
 def run_manual():
     state = State(Init)
-    m = core.TaskManager(CubeMachine)
-    with m.want(state,do_in_container.desired_state):
+    try:
+        Container(state)
         do_in_container(state)
-        with m.want(state,do_in_shell.desired_state):
-            do_in_shell(state)
+        Shell(state)
+        do_in_shell(state)
+    finally:
+        CubeMachine.taskmanager.auto_transit_to(state,Init)
 
 def run_automatic():
     state = State(Init)
@@ -107,7 +124,8 @@ def run_automatic():
         do_in_shell,
         do_in_yangsh,
     ]
-    m.run_tasks(state,[(t,t.desired_state) for t in tasks])
+    for res in m.run_tasks(state,[(t,t.desired_state) for t in tasks]):
+        pass
 
 if __name__ == '__main__':
     run_manual()
