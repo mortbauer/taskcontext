@@ -58,11 +58,9 @@ class OrigContext(ContextDecorator):
         self._go_back_to_orig()
 
     def _go_back_to_orig(self):
-        try:
-            logger.debug('trying to go back to %s',self.orig_state)
-            self._taskmanager.auto_transit_to(self._stateobj,self.orig_state)
-        except Exception:
-            logger.exception('failed going back to orig state %s',self.orig_state)
+        logger.debug('trying to go back to %s',self.orig_state)
+        self._taskmanager.auto_transit_to(self._stateobj,self.orig_state)
+
 
 class TaskContext(OrigContext):
     def __init__(self,taskmanager:TaskManager,stateobj:Any, desired_state:StateMeta):
